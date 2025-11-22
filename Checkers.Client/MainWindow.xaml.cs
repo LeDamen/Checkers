@@ -271,6 +271,72 @@ namespace Checkers.Client
             int dr = tr - sr;
             int dc = tc - sc;
 
+
+            // ---------- ХОДЫ ДАМКИ ----------
+            if (isKing)
+            {
+                int adr = Math.Abs(dr);
+                int adc = Math.Abs(dc);
+
+                // Дамка должна двигаться по диагонали
+                if (adr != adc) return;
+
+                int stepR = dr > 0 ? 1 : -1;
+                int stepC = dc > 0 ? 1 : -1;
+
+                int r = sr + stepR;
+                int c = sc + stepC;
+
+                int enemyCount = 0;
+                int capturedR = -1, capturedC = -1;
+
+                while (r != tr && c != tc)
+                {
+                    string mid = board[r * 8 + c];
+
+                    if (mid != "")
+                    {
+                        // Своя фигура
+                        if ((isWhite && (mid == "w" || mid == "W")) ||
+                            (!isWhite && (mid == "b" || mid == "B")))
+                            return;
+
+                        enemyCount++;
+                        capturedR = r;
+                        capturedC = c;
+
+                        if (enemyCount > 1) return;
+                    }
+
+                    r += stepR;
+                    c += stepC;
+                }
+
+                // Цель должна быть пустой
+                if (board[ti] != "") return;
+
+                // Если была рубка — убрать врага
+                if (enemyCount == 1)
+                {
+                    board[capturedR * 8 + capturedC] = "";
+                }
+
+                // Сделать ход дамкой
+                board[ti] = piece;
+                board[si] = "";
+
+                // Проверка многоходовой рубки дамкой
+                if (enemyCount == 1 && HasMoreKingCaptures(tr, tc, piece))
+                {
+                    return; // дамка продолжает рубку, очередь НЕ меняем
+                }
+
+                // Очередь меняется
+                _state.WhiteTurn = !_state.WhiteTurn;
+                return;
+            }
+
+
             // ---------- ПРОСТОЙ ХОД ----------
             if (Math.Abs(dr) == 1 && Math.Abs(dc) == 1)
             {
@@ -315,6 +381,14 @@ namespace Checkers.Client
 
                 TryPromoteToKing(tr, ti);
 
+                // ---------- ПРЕВРАЩЕНИЕ В ДАМКУ ----------
+                if (piece == "w" && tr == 0)
+                    board[ti] = "W";
+
+                if (piece == "b" && tr == 7)
+                    board[ti] = "B";
+
+
                 // ---------- ПРОВЕРКА МНОГОХОДОВОЙ РУБКИ ----------
                 if (HasMoreCaptures(tr, tc, piece))
                 {
@@ -339,6 +413,8 @@ namespace Checkers.Client
             if (p == "b" && row == 7)
                 _state.Board[index] = "B";
         }
+
+
 
         private bool HasMoreKingCaptures(int r, int c, string piece)
         {
@@ -391,10 +467,10 @@ namespace Checkers.Client
         }
 
 
+
         private bool HasMoreCaptures(int r, int c, string piece)
         {
             bool isWhite = piece == "w" || piece == "W";
-            bool isKing = piece == "W" || piece == "B";
 
             int[,] dirs = {
         { 1, 1 }, { 1, -1 },
@@ -405,13 +481,6 @@ namespace Checkers.Client
             {
                 int dr = dirs[i, 0];
                 int dc = dirs[i, 1];
-
-                // Для простых шашек — только вперёд
-                if (!isKing)
-                {
-                    if (piece == "w" && dr != -1) continue;
-                    if (piece == "b" && dr != 1) continue;
-                }
 
                 int cr = r + dr;
                 int cc = c + dc;
@@ -437,6 +506,7 @@ namespace Checkers.Client
 
             return false;
         }
+
 
 
 
