@@ -61,7 +61,8 @@ namespace Checkers.Client
         private async void InitSignalR()
         {
             _connection = new HubConnectionBuilder()
-                .WithUrl("https://localhost:7150/gamehub")
+             // Use HTTP for local development to avoid dev-cert SSL issues.
+             .WithUrl("http://localhost:5147/gamehub")
                 .WithAutomaticReconnect()
                 .Build();
 
@@ -75,6 +76,31 @@ namespace Checkers.Client
             {
                 ApplyMoveLocal(move);
                 Dispatcher.Invoke(RenderBoard);
+            });
+
+            // When a player joins the room, update local state and if we're the host, send full state back
+            _connection.On<PlayerDto>("PlayerJoined", async player =>
+            {
+                // Update local state player slots
+                if (_state != null)
+                {
+                    if (player.IsWhite)
+                        _state.PlayerWhite = player;
+                    else
+                        _state.PlayerBlack = player;
+
+                    Dispatcher.Invoke(RenderBoard);
+                }
+
+                // If I'm the host (white) then push the full state so the joining client receives current board
+                try
+                {
+                    if (_me != null && _me.IsWhite && !string.IsNullOrEmpty(_gameId) && _state != null)
+                    {
+                        await _connection.InvokeAsync("SyncState", _gameId, _state);
+                    }
+                }
+                catch { }
             });
 
             try
@@ -195,6 +221,23 @@ namespace Checkers.Client
                 if (_state.Board[r * 8 + c] == "")
                     return;
 
+                // Запретить выбор чужих фигур: клиент должен играть только за свою сторону
+                if (_me != null)
+                {
+                    string piece = _state.Board[r * 8 + c];
+                    bool pieceIsWhite = piece == "w" || piece == "W";
+                    if (pieceIsWhite != _me.IsWhite)
+                    {
+                        MessageBox.Show("Нельзя выбирать фигуры противника");
+                        return;
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("Сначала создайте или присоединитесь к игре");
+                    return;
+                }
+
                 _selected = (r, c);
                 btn.BorderBrush = Brushes.Red;
                 btn.BorderThickness = new Thickness(3);
@@ -235,7 +278,11 @@ namespace Checkers.Client
                 // отправляем на сервер
                 if (_gameId != null)
                 {
-                    await _connection.InvokeAsync("MakeMove", _gameId, move);
+                    // дополнительно убедимся, что ход делает текущий игрок
+                    if (_me != null)
+                    {
+                        await _connection.InvokeAsync("MakeMove", _gameId, move);
+                    }
                 }
 
             }
